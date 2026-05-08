@@ -2,15 +2,14 @@ import sys
 import os
 import random
 
-# Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from backend.data.yfinance_loader import fetch_historical_data
 from backend.genetic.gene import Gene
+from backend.stress_test.monte_carlo import run_monte_carlo
 
 
 def create_random_gene() -> Gene:
-    """Create one agent with random gene values within standard trading bounds."""
     return Gene(
         rsi_period=random.randint(5, 30),
         ma_short=random.randint(5, 15),
@@ -21,51 +20,68 @@ def create_random_gene() -> Gene:
     )
 
 
-def create_population(size: int = 10) -> list:
-    """Create a population of random agents."""
-    return [create_random_gene() for _ in range(size)]
-
-
 if __name__ == "__main__":
-    print("=" * 60)
+    print("=" * 65)
     print("        EVOTRADE - Genetic Algorithm Trading Bot")
-    print("         STEP 1: Population Initialization Demo")
-    print("=" * 60)
+    print("         STEP 2: Fitness Evaluation Demo")
+    print("=" * 65)
 
-    # Step 1: Fetch data
-    print("\n[1/3] Fetching market data...")
+    print("\n[1/3] Fetching BTC-USD market data...")
     df = fetch_historical_data("BTC-USD", "1y")
-    print(f"      Shape: {df.shape} | From {str(df.index[0])[:10]} to {str(df.index[-1])[:10]}")
+    print(f"      {len(df)} days loaded")
 
-    # Step 2: Create population
-    print("\n[2/3] Creating population of 10 random agents...")
+    print("\n[2/3] Creating 10 agents and scoring each one...")
     print()
-    print(f"{'Agent':<8} {'RSI':>4} {'MA_S':>5} {'MA_L':>5} {'StopLoss':>9} {'TakeProfit':>11} {'PositionSz':>11}")
-    print("-" * 60)
+    print(f"{'Agent':<10} {'RSI':>4} {'MA':>7} {'Fitness':>8} {'Return':>8} {'Trades':>7} {'WinRate':>8} {'Survival':>9}")
+    print("-" * 65)
 
-    population = create_population(10)
-    for i, gene in enumerate(population):
+    population = []
+    for i in range(10):
+        gene = create_random_gene()
+        mc_result = run_monte_carlo(gene, df, n_runs=5)
+
         g = gene.to_dict()
-        print(f"Agent {i+1:<2}  {g['rsi_period']:>4}  {g['ma_short']:>5}  {g['ma_long']:>5}  "
-              f"{g['stop_loss_pct']:>8.1%}  {g['take_profit_pct']:>10.1%}  {g['position_size_pct']:>10.1%}")
+        population.append({
+            'gene': gene,
+            'fitness': mc_result['robust_fitness'],
+            'mc_result': mc_result
+        })
 
-    # Step 3: Demo mutation
-    print("\n[3/3] Demo: Mutating Agent 1...")
-    original = population[0].to_dict()
-    population[0].mutate()
-    mutated = population[0].to_dict()
-    
-    changes = [k for k in original if original[k] != mutated[k]]
-    print(f"      Changed: {changes[0] if changes else 'no change'}")
-    if changes:
-        print(f"      Before: {original[changes[0]]}")
-        print(f"      After:  {mutated[changes[0]]}")
+        scenario_results = mc_result['scenario_results']
+        normal_result = next((r for r in scenario_results if r['scenario'] == 'normal'), {})
+
+        print(f"Agent {i+1:<4}  {g['rsi_period']:>4}  "
+              f"{g['ma_short']:>2}/{g['ma_long']:<3}  "
+              f"{mc_result['robust_fitness']:>8.4f}  "
+              f"{normal_result.get('profit_pct', 0):>+7.1f}%  "
+              f"{normal_result.get('total_trades', 0):>7}  "
+              f"{normal_result.get('win_rate', 0):>7.1f}%  "
+              f"{mc_result['survival_rate']:>8.0%}")
+
+    print("-" * 65)
+
+    print("\n[3/3] Ranking agents by fitness score...")
+    population.sort(key=lambda x: x['fitness'], reverse=True)
 
     print()
-    print("=" * 60)
-    print("  Population created successfully!")
-    print(f"  Total agents: {len(population)}")
-    print(f"  Data rows available for backtesting: {len(df)}")
+    print("  SURVIVORS (Top 3):")
+    for i, agent in enumerate(population[:3]):
+        g = agent['gene'].to_dict()
+        print(f"  #{i+1} Agent | Fitness: {agent['fitness']:.4f} | "
+              f"RSI:{g['rsi_period']} MA:{g['ma_short']}/{g['ma_long']} | "
+              f"Best in: {agent['mc_result']['best_scenario']}")
+
     print()
-    print("  Next step: Backtest each agent -> Calculate fitness scores")
-    print("=" * 60)
+    print("  ELIMINATED (Bottom 7):")
+    for agent in population[3:]:
+        g = agent['gene'].to_dict()
+        print(f"  ✗ Fitness: {agent['fitness']:.4f} | "
+              f"Worst in: {agent['mc_result']['worst_scenario']}")
+
+    print()
+    print("=" * 65)
+    print(f"  Best Agent Fitness Score: {population[0]['fitness']:.4f}")
+    print(f"  Best Agent Genes: {population[0]['gene'].to_dict()}")
+    print()
+    print("  Next step: Crossover + Mutation -> Evolution Loop")
+    print("=" * 65)
