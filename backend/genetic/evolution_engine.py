@@ -1,34 +1,51 @@
-"""Convergence-based evolution loop."""
+import json
+import os
+import random
+from datetime import datetime
 
-from __future__ import annotations
+from backend.data.yfinance_loader import fetch_historical_data
+from backend.genetic.gene import Gene
+from backend.genetic.fitness import backtest_gene
+from backend.genetic.crossover import create_offspring
+from backend.genetic.convergence import ConvergenceChecker
+from backend.stress_test.monte_carlo import run_monte_carlo
 
-from dataclasses import asdict, dataclass
-
-import numpy as np
-
-try:
-    from ..data.yfinance_loader import fetch_historical_data
-    from ..processing.indicators import calculate_indicators
-    from ..stress_test.monte_carlo import run_monte_carlo
-except ImportError:
-    from data.yfinance_loader import fetch_historical_data
-    from processing.indicators import calculate_indicators
-    from stress_test.monte_carlo import run_monte_carlo
-
-from .convergence import ConvergenceChecker
-from .crossover import create_offspring
-from .fitness import backtest_gene
-from .gene import Gene
-from .population import create_population
-from .selection import elitism_selection, weighted_selection
+_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'outputs')
+_LOG_FILE = os.path.join(_OUTPUT_DIR, 'evolution_log.json')
 
 
-@dataclass
-class GenerationSummary:
-    generation: int
-    best_fitness: float
-    avg_fitness: float
-    best_return_pct: float
+def _ensure_output_dir() -> None:
+    os.makedirs(_OUTPUT_DIR, exist_ok=True)
+
+
+def _append_generation_log(entry: dict) -> None:
+    _ensure_output_dir()
+    existing: list = []
+    if os.path.exists(_LOG_FILE):
+        try:
+            with open(_LOG_FILE, 'r') as f:
+                existing = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            existing = []
+    existing.append(entry)
+    with open(_LOG_FILE, 'w') as f:
+        json.dump(existing, f, indent=2)
+
+
+def _make_population(size: int) -> list[Gene]:
+    """Create a population of random Gene objects using Gene defaults + randomness."""
+    population = []
+    for _ in range(size):
+        gene = Gene(
+            rsi_period=random.randint(5, 30),
+            ma_short=random.randint(5, 20),
+            ma_long=random.randint(21, 100),
+            stop_loss_pct=round(random.uniform(0.02, 0.10), 3),
+            take_profit_pct=round(random.uniform(0.05, 0.20), 3),
+            position_size_pct=round(random.uniform(0.10, 0.40), 3),
+        )
+        population.append(gene)
+    return population
 
 
 def run_evolution(
@@ -37,90 +54,111 @@ def run_evolution(
     initial_capital: float = 10000.0,
     population_size: int = 10,
     max_generations: int = 100,
-    use_monte_carlo: bool = True,
     verbose: bool = True,
-) -> dict[str, object]:
-    """Run GA evolution until convergence or safety cap."""
-    raw_df = fetch_historical_data(symbol=symbol, period="1y")
-    df = calculate_indicators(raw_df)
-    population = create_population(size=population_size, risk_profile=risk_profile, rng=np.random.default_rng(2026))
-    checker = ConvergenceChecker(patience=5, min_improvement=0.01)
+) -> dict:
+    """
+    Run the full genetic algorithm evolution loop until convergence or max_generations.
+
+    Returns dict with:
+        best_gene          : Gene object
+        best_fitness       : float
+        generations_run    : int
+        fitness_history    : list of floats (best fitness per generation)
+        convergence_reason : str
+        best_result        : dict from backtest_gene()
+    """
+    # ── Step 1: Fetch data ────────────────────────────────────────────────────
+    df = fetch_historical_data(symbol=symbol, period="2y")
+
+    # ── Step 2: Create initial population ────────────────────────────────────
+    population = _make_population(population_size)
+
+    checker = ConvergenceChecker(patience=5, min_improvement=0.005)
     fitness_history: list[float] = []
-    generation_table: list[GenerationSummary] = []
-    best_gene = population[0]
-    best_result: dict[str, float | int | list[dict[str, float]]] = backtest_gene(best_gene, raw_df, initial_capital)
-    converged_reason = "patience_exhausted"
+    best_gene: Gene = population[0]
+    best_fitness: float = float("-inf")
+    convergence_reason: str = "max_generations_reached"
 
+    if verbose:
+        print(f"\n  {'Gen':>4}  {'Best':>9}  {'Avg':>9}  {'Stale':>6}  {'Status'}")
+        print(f"  {'-' * 52}")
+
+    # ── Step 3: Evolution loop ────────────────────────────────────────────────
     generation = 0
-    while True:
+    while generation < max_generations:
         generation += 1
-        scored: list[tuple[Gene, float, dict[str, float | int | list[dict[str, float]]]]] = []
 
+        # a. Score every gene via Monte Carlo
+        scored: list[tuple[Gene, float]] = []
         for gene in population:
-            if use_monte_carlo:
-                mc = run_monte_carlo(gene, raw_df, n_simulations=100)
-                score = float(mc["robust_fitness_score"])
-                bt = backtest_gene(gene, raw_df, initial_capital)
-            else:
-                bt = backtest_gene(gene, raw_df, initial_capital)
-                score = float(bt["fitness_score"])
-            scored.append((gene, score, bt))
+            mc = run_monte_carlo(gene, df, n_runs=5)
+            score = float(mc["robust_fitness"])
+            scored.append((gene, score))
 
-        scored_sorted = sorted(scored, key=lambda x: x[1], reverse=True)
-        best_gene = scored_sorted[0][0]
-        best_fitness = float(scored_sorted[0][1])
-        best_result = scored_sorted[0][2]
-        avg_fitness = float(np.mean([s for _, s, _ in scored]))
-        fitness_history.append(best_fitness)
+        # b. Sort descending by fitness
+        scored.sort(key=lambda x: x[1], reverse=True)
 
-        converged = checker.update(best_fitness)
-        status = "CONVERGED" if converged else "IMPROVING"
+        gen_best_fitness = scored[0][1]
+        gen_avg_fitness = sum(s for _, s in scored) / len(scored)
+
+        # Track global best
+        if gen_best_fitness > best_fitness:
+            best_fitness = gen_best_fitness
+            best_gene = scored[0][0]
+
+        fitness_history.append(gen_best_fitness)
+
+        # c. Top 3 survivors (elitism)
+        survivors = [gene for gene, _ in scored[:3]]
+
+        # d. Update convergence checker
+        converged = checker.update(gen_best_fitness)
+        stale = checker._stale_count
+        status = checker.get_status()
+
+        # h. Save generation to JSON log
+        _append_generation_log({
+            "generation": generation,
+            "best_fitness": round(gen_best_fitness, 4),
+            "avg_fitness": round(gen_avg_fitness, 4),
+            "top_gene": survivors[0].to_dict(),
+            "population_size": len(population),
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+        })
+
+        # i. Verbose output
         if verbose:
-            print(
-                f"Gen {generation} | Best: {best_fitness:.2f} | Avg: {avg_fitness:.2f} | "
-                f"Return: {float(best_result['profit_pct']):+.2f}% | Status: {status}"
-            )
+            print(f"  {generation:>4}  {gen_best_fitness:>9.4f}  {gen_avg_fitness:>9.4f}  {stale:>6}  {status}")
 
-        generation_table.append(
-            GenerationSummary(
-                generation=generation,
-                best_fitness=best_fitness,
-                avg_fitness=avg_fitness,
-                best_return_pct=float(best_result["profit_pct"]),
-            )
-        )
-
+        # e. Convergence check
         if converged:
-            converged_reason = "patience_exhausted"
-            break
-
-        if generation >= max_generations:
-            converged_reason = "safety_cap"
+            convergence_reason = "patience_exhausted"
             if verbose:
-                print("Warning: safety cap reached before convergence.")
+                print(f"\n  Converged after {generation} generations (no improvement for {checker.patience} gens).")
             break
 
-        parent_pairs = [(g, s) for g, s, _ in scored]
-        parents = weighted_selection(parent_pairs)
-        elites = elitism_selection(parent_pairs, elite_count=3)
-        offspring = create_offspring(parents if parents else elites, target_size=population_size)
-        population = (elites + offspring)[:population_size]
-        if len(population) < population_size:
-            population.extend(create_population(size=population_size - len(population), risk_profile=risk_profile))
+        # f. Create offspring to fill population back to target size
+        offspring = create_offspring(survivors, target_size=population_size)
+
+        # g. New population = survivors + offspring
+        population = (survivors + offspring)[:population_size]
+
+    # ── Step 4: Final backtest of best gene ───────────────────────────────────
+    best_result = backtest_gene(best_gene, df, initial_capital=initial_capital)
 
     return {
         "best_gene": best_gene,
-        "fitness_history": fitness_history,
-        "generation_count": generation,
-        "converged_reason": converged_reason,
-        "best_backtest_result": best_result,
-        "generation_table": [asdict(row) for row in generation_table],
+        "best_fitness": round(best_fitness, 4),
+        "generations_run": generation,
+        "fitness_history": [round(f, 4) for f in fitness_history],
+        "convergence_reason": convergence_reason,
+        "best_result": best_result,
     }
 
 
 if __name__ == "__main__":
-    result = run_evolution(verbose=True, use_monte_carlo=True)
-    print(f"\nLoop ran {result['generation_count']} generations (not fixed — stopped when evolution plateaued)")
-    print("Convergence reason: fitness did not improve for 5 consecutive generations")
-    print("Best gene:", result["best_gene"].to_dict())
-    print("Best backtest:", result["best_backtest_result"])
+    result = run_evolution(symbol="BTC-USD", risk_profile="medium", verbose=True, max_generations=20)
+    print("\nBest gene:", result["best_gene"].to_dict())
+    print("Best fitness:", result["best_fitness"])
+    print("Generations run:", result["generations_run"])
+    print("Convergence reason:", result["convergence_reason"])
