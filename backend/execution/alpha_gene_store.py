@@ -73,6 +73,62 @@ class AlphaGeneStore:
             logger.info("Alpha Gene store cleared.")
         self._gene = None
 
+    # --- Top-3 genes persistence ---------------------------------------------
+    _TOP_GENES_PATH = Path(__file__).parent.parent.parent / "outputs" / "top_genes.json"
+
+    def save_top_genes(self, top_genes: list) -> None:
+        """
+        Persist a list of top genes (list[Gene] or list[dict]) to outputs/top_genes.json.
+        """
+        path = _TOP_GENES_PATH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        serial = []
+        for g in top_genes:
+            if hasattr(g, "to_dict"):
+                d = g.to_dict()
+            elif isinstance(g, dict):
+                d = g
+            else:
+                d = getattr(g, "__dict__", {})
+            # include fitness if present
+            if hasattr(g, "fitness"):
+                d["fitness"] = getattr(g, "fitness")
+            serial.append(d)
+        path.write_text(json.dumps(serial, indent=2), encoding="utf-8")
+        logger.info("Top %d genes saved to %s", len(serial), path)
+
+    def load_top_genes(self) -> list:
+        """
+        Load top genes from outputs/top_genes.json.
+        Returns list[Gene] when possible, otherwise list[dict].
+        """
+        path = _TOP_GENES_PATH
+        if not path.exists():
+            logger.info("No top_genes store found at %s.", path)
+            return []
+
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            genes: list = []
+            for item in data:
+                if isinstance(item, dict):
+                    try:
+                        # Create Gene using expected keys if possible
+                        gene_kwargs = {k: item[k] for k in ("rsi_period", "ma_short", "ma_long", "stop_loss_pct", "take_profit_pct", "position_size_pct") if k in item}
+                        gene = Gene(**gene_kwargs)
+                        if "fitness" in item:
+                            setattr(gene, "fitness", item["fitness"])
+                        genes.append(gene)
+                    except Exception:
+                        genes.append(item)
+                else:
+                    genes.append(item)
+            logger.info("Loaded %d top genes from %s", len(genes), path)
+            return genes
+        except Exception as exc:
+            logger.error("Failed to load top genes: %s", exc)
+            return []
+
 
 if __name__ == "__main__":
     import tempfile

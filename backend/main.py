@@ -32,6 +32,7 @@ from execution.re_evolution_trigger import ReEvolutionTrigger
 from execution.safety_controls import SafetyControls
 from genetic.evolution_engine import EvolutionEngine
 from genetic.gene import Gene
+from genetic.fitness import backtest_gene
 from processing.markov_detector import MarkovDetector
 
 logging.basicConfig(
@@ -155,6 +156,133 @@ async def _launch_evolution_and_trading() -> None:
         await _broadcast({"type": "error", "message": str(exc)})
         app_state.running = False
 
+
+async def start_live_adaptation(top_genes: list[Gene]) -> None:
+    """
+    Live adaptation loop: score Top-3 genes on incoming ticks, pick best, and trade.
+    Lightweight per-tick scoring (no full recompute), and a periodic parent-child
+    refinement that evaluates 1 child per parent and promotes if better.
+    """
+    try:
+        # Convert incoming representations into Gene objects
+        genes: list[Gene] = []
+        for g in top_genes:
+            if isinstance(g, dict):
+                try:
+                    gene = Gene(
+                        rsi_period=int(g.get("rsi_period", 14)),
+                        ma_short=int(g.get("ma_short", 10)),
+                        ma_long=int(g.get("ma_long", 50)),
+                        stop_loss_pct=float(g.get("stop_loss_pct", 0.05)),
+                        take_profit_pct=float(g.get("take_profit_pct", 0.10)),
+                        position_size_pct=float(g.get("position_size_pct", 0.20)),
+                    )
+                    if "fitness" in g:
+                        setattr(gene, "fitness", g["fitness"])
+                except Exception:
+                    continue
+            else:
+                gene = g
+            genes.append(gene)
+
+        if not genes:
+            logger.warning("start_live_adaptation: no valid top_genes provided")
+            return
+
+        app_state.top_genes = [getattr(g, "to_dict", lambda: g)() if hasattr(g, "to_dict") else g for g in genes]
+        app_state.pre_market_done = True
+        await _broadcast({"type": "pre_market_complete", "top_genes": app_state.top_genes})
+
+        local_prices: list[float] = []
+
+        def score_gene_sync(gene: Gene, prices: list[float]) -> float:
+            # fast heuristic score used per tick
+            if len(prices) < gene.ma_long + 1:
+                return -1e6
+            period = gene.rsi_period
+            if len(prices) < period + 1:
+                return -1e6
+            window = prices[-(period + 1):]
+            deltas = [window[i + 1] - window[i] for i in range(period)]
+            gains = sum(d for d in deltas if d > 0) / period
+            losses = sum(-d for d in deltas if d < 0) / period
+            rsi = 100.0 if losses == 0 else 100 - 100 / (1 + gains / (losses + 1e-12))
+            ma_s = sum(prices[-gene.ma_short:]) / gene.ma_short
+            ma_l = sum(prices[-gene.ma_long:]) / gene.ma_long
+            score = 0.0
+            if rsi < 30 and prices[-1] > ma_s:
+                score += 3.0
+            if rsi > 70 and prices[-1] < ma_l:
+                score -= 2.0
+            score += (gene.take_profit_pct - gene.stop_loss_pct) * 10.0
+            score += gene.position_size_pct * 2.0
+            return score
+
+        try:
+            from data.binance_ws import BinanceWebSocket
+            feed = BinanceWebSocket(app_state.symbol.replace("/", ""))
+        except Exception as exc:
+            logger.error("Binance feed unavailable: %s", exc)
+            return
+
+        async def _on_tick(tick: dict) -> None:
+            price = float(tick.get("close", 0))
+            if price <= 0:
+                return
+            if app_state.trader:
+                await app_state.trader.on_tick(tick)
+                prices = app_state.trader._prices
+            else:
+                local_prices.append(price)
+                lookback = max(g.ma_long for g in genes) + 5
+                if len(local_prices) > lookback * 2:
+                    del local_prices[:-lookback * 2]
+                prices = local_prices
+
+            scores = await asyncio.gather(*[asyncio.to_thread(score_gene_sync, g, list(prices)) for g in genes])
+            best_idx = max(range(len(scores)), key=lambda i: scores[i])
+            best_gene = genes[best_idx]
+            if app_state.trader:
+                app_state.trader.gene = best_gene
+            app_state.active_gene = best_gene.to_dict() if hasattr(best_gene, "to_dict") else best_gene
+            await _broadcast({"type": "live_gene_selected", "gene": app_state.active_gene})
+
+        feed.add_callback(_on_tick)
+        task = asyncio.create_task(feed.start())
+        app_state.binance_feed_task = task
+        logger.info("Live adaptation started with %d genes", len(genes))
+
+        async def _refinement_loop() -> None:
+            # Run light parent-child refinement every X minutes
+            while True:
+                await asyncio.sleep(60 * 5)
+                prices_ref = app_state.trader._prices if app_state.trader else local_prices
+                if len(prices_ref) < 50:
+                    continue
+                import pandas as pd
+                df_quick = pd.DataFrame({"Close": prices_ref[-250:]})
+                for i, parent in enumerate(genes):
+                    child = Gene(**(parent.to_dict() if hasattr(parent, "to_dict") else parent))
+                    child.mutate()
+                    try:
+                        res = backtest_gene(child, df_quick, initial_capital=app_state.initial_capital)
+                        child_score = res.get("fitness_score", 0.0)
+                    except Exception as exc:
+                        logger.debug("Quick eval failed for child: %s", exc)
+                        continue
+                    weakest_idx = min(range(len(genes)), key=lambda j: getattr(genes[j], "fitness", float("-inf")))
+                    weakest_score = getattr(genes[weakest_idx], "fitness", float("-inf"))
+                    if child_score > weakest_score:
+                        child.fitness = child_score
+                        genes[weakest_idx] = child
+                        app_state.top_genes = [g.to_dict() if hasattr(g, "to_dict") else g for g in genes]
+                        await _broadcast({"type": "child_gene_promoted", "index": weakest_idx, "gene": child.to_dict() if hasattr(child, "to_dict") else child})
+
+        asyncio.create_task(_refinement_loop())
+
+    except Exception as exc:
+        logger.exception("start_live_adaptation failed: %s", exc)
+        await _broadcast({"type": "error", "message": "live_adaptation_error"})
 
 # ── FastAPI lifecycle ─────────────────────────────────────────────────────────
 
