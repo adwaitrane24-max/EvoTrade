@@ -1,0 +1,272 @@
+[
+  {
+    "generation": 1,
+    "best_fitness": 0.3488,
+    "avg_fitness": 0.1381,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 72,
+      "stop_loss_pct": 0.078,
+      "take_profit_pct": 0.116,
+      "position_size_pct": 0.39
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:25"
+  },
+  {
+    "generation": 2,
+    "best_fitness": 0.3373,
+    "avg_fitness": 0.2455,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 72,
+      "stop_loss_pct": 0.078,
+      "take_profit_pct": 0.116,
+      "position_size_pct": 0.39
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:27"
+  },
+  {
+    "generation": 3,
+    "best_fitness": 0.4275,
+    "avg_fitness": 0.2957,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.117,
+      "position_size_pct": 0.39
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:29"
+  },
+  {
+    "generation": 4,
+    "best_fitness": 0.4173,
+    "avg_fitness": 0.2978,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.118,
+      "position_size_pct": 0.39
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:31"
+  },
+  {
+    "generation": 5,
+    "best_fitness": 0.455,
+    "avg_fitness": 0.3497,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.117,
+      "position_size_pct": 0.386
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:33"
+  },
+  {
+    "generation": 6,
+    "best_fitness": 0.4172,
+    "avg_fitness": 0.3209,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.112,
+      "position_size_pct": 0.39
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:34"
+  },
+  {
+    "generation": 7,
+    "best_fitness": 0.4125,
+    "avg_fitness": 0.3235,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.112,
+      "position_size_pct": 0.376
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:35"
+  },
+  {
+    "generation": 8,
+    "best_fitness": 0.4048,
+    "avg_fitness": 0.3356,
+    "top_gene": {
+      "rsi_period": 28,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.117,
+      "position_size_pct": 0.379
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:36"
+  },
+  {
+    "generation": 9,
+    "best_fitness": 0.4603,
+    "avg_fitness": 0.3425,
+    "top_gene": {
+      "rsi_period": 28,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.118,
+      "position_size_pct": 0.362
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:36"
+  },
+  {
+    "generation": 10,
+    "best_fitness": 0.4104,
+    "avg_fitness": 0.362,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.061,
+      "take_profit_pct": 0.117,
+      "position_size_pct": 0.345
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:37"
+  },
+  {
+    "generation": 11,
+    "best_fitness": 0.4139,
+    "avg_fitness": 0.2914,
+    "top_gene": {
+      "rsi_period": 26,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.112,
+      "position_size_pct": 0.382
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:38"
+  },
+  {
+    "generation": 12,
+    "best_fitness": 0.6716,
+    "avg_fitness": 0.4517,
+    "top_gene": {
+      "rsi_period": 29,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.112,
+      "position_size_pct": 0.382
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:39"
+  },
+  {
+    "generation": 13,
+    "best_fitness": 3.4522,
+    "avg_fitness": 0.8062,
+    "top_gene": {
+      "rsi_period": 28,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.061,
+      "take_profit_pct": 0.108,
+      "position_size_pct": 0.362
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:40"
+  },
+  {
+    "generation": 14,
+    "best_fitness": 0.8179,
+    "avg_fitness": 0.6257,
+    "top_gene": {
+      "rsi_period": 30,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.107,
+      "position_size_pct": 0.362
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:41"
+  },
+  {
+    "generation": 15,
+    "best_fitness": 0.8147,
+    "avg_fitness": 0.5035,
+    "top_gene": {
+      "rsi_period": 29,
+      "ma_short": 9,
+      "ma_long": 77,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.12,
+      "position_size_pct": 0.382
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:42"
+  },
+  {
+    "generation": 16,
+    "best_fitness": 0.8009,
+    "avg_fitness": 0.5848,
+    "top_gene": {
+      "rsi_period": 29,
+      "ma_short": 9,
+      "ma_long": 76,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.111,
+      "position_size_pct": 0.382
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:43"
+  },
+  {
+    "generation": 17,
+    "best_fitness": 0.8614,
+    "avg_fitness": 0.6688,
+    "top_gene": {
+      "rsi_period": 29,
+      "ma_short": 9,
+      "ma_long": 76,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.111,
+      "position_size_pct": 0.382
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:44"
+  },
+  {
+    "generation": 18,
+    "best_fitness": 2.1932,
+    "avg_fitness": 0.7798,
+    "top_gene": {
+      "rsi_period": 29,
+      "ma_short": 9,
+      "ma_long": 76,
+      "stop_loss_pct": 0.055,
+      "take_profit_pct": 0.111,
+      "position_size_pct": 0.383
+    },
+    "population_size": 10,
+    "timestamp": "2026-05-08T14:48:45"
+  }
+]

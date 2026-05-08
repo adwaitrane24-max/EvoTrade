@@ -10,7 +10,7 @@ from backend.genetic.crossover import create_offspring
 from backend.genetic.convergence import ConvergenceChecker
 from backend.stress_test.monte_carlo import run_monte_carlo
 
-_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'outputs')
+_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'outputs')
 _LOG_FILE = os.path.join(_OUTPUT_DIR, 'evolution_log.json')
 
 
