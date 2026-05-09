@@ -12,7 +12,11 @@ import sys
 import os
 
 # Make backend importable from project root
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+_repo_root = os.path.join(os.path.dirname(__file__), '..')
+_backend_dir = os.path.join(_repo_root, 'backend')
+for _p in (_repo_root, _backend_dir):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 import numpy as np
 
@@ -28,23 +32,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def section(title: str) -> None:
-    print(f"\n{'═' * 64}")
+    print("\n" + "=" * 64)
     print(f"  {title}")
-    print(f"{'═' * 64}")
+    print("=" * 64)
 
 
 async def main() -> None:
     args = parse_args()
 
     print()
-    print("  ███████╗██╗   ██╗ ██████╗ ████████╗██████╗  █████╗ ██████╗ ███████╗")
-    print("  ██╔════╝██║   ██║██╔═══██╗╚══██╔══╝██╔══██╗██╔══██╗██╔══██╗██╔════╝")
-    print("  █████╗  ██║   ██║██║   ██║   ██║   ██████╔╝███████║██║  ██║█████╗  ")
-    print("  ██╔══╝  ╚██╗ ██╔╝██║   ██║   ██║   ██╔══██╗██╔══██║██║  ██║██╔══╝  ")
-    print("  ███████╗ ╚████╔╝ ╚██████╔╝   ██║   ██║  ██║██║  ██║██████╔╝███████╗")
-    print("  ╚══════╝  ╚═══╝   ╚═════╝    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝")
-    print()
-    print("  Self-Evolving Genetic Algorithm Trading Bot  |  Demo Mode")
+    print("  EvoTrade - Self-Evolving GA Trading Bot  | Demo Mode")
     print(f"  Symbol: {args.symbol}  |  Risk: {args.profile}  |  Max gens: {args.generations}")
 
     # ── Step 1: Load data ─────────────────────────────────────────────────────
@@ -54,7 +51,7 @@ async def main() -> None:
     loader = YFinanceLoader(args.symbol)
     print(f"  Fetching {args.period_days} days of {args.symbol} OHLCV from Yahoo Finance…")
     df = loader.fetch(period_days=args.period_days)
-    print(f"  Loaded {len(df)} bars  |  {df.index[0].date()} → {df.index[-1].date()}")
+    print(f"  Loaded {len(df)} bars  |  {df.index[0].date()} -> {df.index[-1].date()}")
     print(f"  Price range: ${df['Close'].min():,.0f} — ${df['Close'].max():,.0f}")
 
     # ── Step 2: Fit Markov regime detector ────────────────────────────────────
@@ -108,30 +105,22 @@ async def main() -> None:
     alpha = result.alpha_gene
 
     # ── Step 4: Monte Carlo stress test ───────────────────────────────────────
-    section("Step 4 / 5 — Monte Carlo Stress Test (500 synthetic paths)")
-    from stress_test.monte_carlo import MonteCarloEngine
-    from stress_test.scenarios import ScenarioGenerator, ScenarioType
+    section("Step 4 / 5 — Monte Carlo Stress Test (scenario-based)")
+    from stress_test.monte_carlo import run_monte_carlo
 
-    mc_engine = MonteCarloEngine(n_paths=500, horizon_days=30, seed=42)
-    mc_result  = mc_engine.evaluate(alpha, mu=0.05, sigma=0.80)
+    mc_result = run_monte_carlo(alpha, df, n_runs=5)
 
-    print(f"  Paths simulated       : {mc_result.n_paths}")
-    print(f"  Mean return           : {mc_result.mean_return:+.2%}")
-    print(f"  Median return         : {mc_result.median_return:+.2%}")
-    print(f"  VaR (95th pct worst)  : {mc_result.var_95:.2%}")
-    print(f"  Survival rate (>-50%) : {mc_result.survival_rate:.1%}")
-    print(f"  Crash survival rate   : {mc_result.crash_survival_rate:.1%}")
-    print(f"  Weighted MC fitness   : {mc_result.weighted_fitness:.4f}")
+    print(f"  Average fitness       : {mc_result['avg_fitness']:.4f}")
+    print(f"  Survival rate         : {mc_result['survival_rate']:.2%}")
+    print(f"  Robust fitness        : {mc_result['robust_fitness']:.4f}")
 
-    print("\n  — Scenario breakdown —")
-    gen_sc = ScenarioGenerator(n_days=60, s0=float(df["Close"].iloc[-1]), seed=0)
-    for scenario in ScenarioType:
-        sc_result = gen_sc.generate(scenario)
-        print(f"  {scenario.value:<20} return={sc_result.total_return:+.1%}  max_dd={sc_result.max_drawdown:.1%}")
+    print("\n  --- Scenario breakdown ---")
+    for r in mc_result.get('scenario_results', []):
+        print(f"  {r.get('scenario','unknown'):<20} fitness={r.get('fitness_score',0):+.4f} profit_pct={r.get('profit_pct',0):+.1%} max_dd={r.get('max_drawdown',0):+.1%}")
 
     # ── Step 5: Alpha Gene report ─────────────────────────────────────────────
     section("Step 5 / 5 — Alpha Gene Report")
-    print(f"  Evolved in {result.generation_reached} generation(s)  |  Converged: {result.converged}")
+    print(f"  Evolved in {result.generations_run} generation(s)  |  Converged: {result.converged}")
     print()
     gene_dict = alpha.to_dict()
     for k, v in gene_dict.items():
@@ -145,26 +134,26 @@ async def main() -> None:
             display = str(int(v))
             limits  = {"rsi_period": 30, "ma_short": 50, "ma_long": 200}
             filled  = int(v / limits.get(k, 1) * bar_len)
-        bar = "█" * filled + "░" * (bar_len - filled)
+        bar = "#" * filled + "-" * (bar_len - filled)
         print(f"  {k:<22} [{bar}]  {display}")
 
     print()
     print(f"  Fitness score         : {alpha.fitness:+.4f}")
-    print(f"  MC weighted fitness   : {mc_result.weighted_fitness:.4f}")
+    print(f"  MC weighted fitness   : {mc_result['robust_fitness']:.4f}")
 
     if len(fitness_log) > 1:
         print()
         print("  Fitness history per generation:")
         for i, f in enumerate(fitness_log, 1):
-            bar = "█" * max(1, int((f - min(fitness_log)) / (max(fitness_log) - min(fitness_log) + 1e-9) * 30))
+            bar = "#" * max(1, int((f - min(fitness_log)) / (max(fitness_log) - min(fitness_log) + 1e-9) * 30))
             print(f"    Gen {i:>3}  {bar}  {f:.4f}")
 
     print()
-    print("  ─────────────────────────────────────────────────")
+    print("  " + "-" * 48)
     print("  DISCLAIMER: Educational/research tool only.")
     print("  This is NOT financial advice. Do NOT use with")
     print("  real funds without independent risk assessment.")
-    print("  ─────────────────────────────────────────────────")
+    print("  " + "-" * 48)
     print()
 
 

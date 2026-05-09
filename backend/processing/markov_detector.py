@@ -10,7 +10,12 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from hmmlearn import hmm
+try:
+    from hmmlearn import hmm
+    _HAVE_HMMLEARN = True
+except Exception:
+    hmm = None
+    _HAVE_HMMLEARN = False
 
 logger = logging.getLogger(__name__)
 
@@ -71,37 +76,45 @@ class MarkovDetector:
         n_iter: int = 100,
     ) -> "MarkovDetector":
         """
-        Fit the HMM on historical data.
-
-        Args:
-            price_series: Historical close prices.
-            volume_series: Historical volume.
-            n_iter: EM iterations for HMM training.
-
-        Returns:
-            self (for chaining).
+        Fit the HMM on historical data. If hmmlearn is unavailable, fall back
+        to a lightweight quantile-based classifier on log returns.
         """
         X = self._build_features(price_series, volume_series)
+        if len(X) == 0:
+            logger.warning("Not enough data to fit detector.")
+            self._state_to_regime = {0: "bull", 1: "sideways", 2: "bear", 3: "crash"}
+            self.model = object()
+            return self
 
-        self.model = hmm.GaussianHMM(
-            n_components=self.n_components,
-            covariance_type="full",
-            n_iter=n_iter,
-            random_state=self.random_state,
-        )
-        self.model.fit(X)
+        if _HAVE_HMMLEARN:
+            self.model = hmm.GaussianHMM(
+                n_components=self.n_components,
+                covariance_type="full",
+                n_iter=n_iter,
+                random_state=self.random_state,
+            )
+            self.model.fit(X)
 
-        # Map hidden states to regime labels by mean log-return (descending)
-        mean_returns = self.model.means_[:, 0]  # first feature = log_return
-        sorted_states = np.argsort(mean_returns)[::-1]  # highest first
+            # Map hidden states to regime labels by mean log-return (descending)
+            mean_returns = self.model.means_[:, 0]  # first feature = log_return
+            sorted_states = np.argsort(mean_returns)[::-1]  # highest first
 
-        self._state_to_regime = {}
-        for rank, state_idx in enumerate(sorted_states):
-            label = _REGIME_LABELS[rank] if rank < len(_REGIME_LABELS) else f"state_{rank}"
-            self._state_to_regime[int(state_idx)] = label
+            self._state_to_regime = {}
+            for rank, state_idx in enumerate(sorted_states):
+                label = _REGIME_LABELS[rank] if rank < len(_REGIME_LABELS) else f"state_{rank}"
+                self._state_to_regime[int(state_idx)] = label
 
-        logger.info("HMM fitted. State→regime map: %s", self._state_to_regime)
-        return self
+            logger.info("HMM fitted. State→regime map: %s", self._state_to_regime)
+            return self
+        else:
+            # Fallback: use quartiles of log_return to map to regimes
+            log_returns = X[:, 0]
+            q75, q50, q25 = np.percentile(log_returns, [75, 50, 25])
+            self._thresholds = (q75, q50, q25)
+            self._state_to_regime = {0: "bull", 1: "sideways", 2: "bear", 3: "crash"}
+            self.model = object()
+            logger.info("Fallback MarkovDetector fitted using quantiles. thresholds=%s", self._thresholds)
+            return self
 
     def detect(
         self,
@@ -129,11 +142,29 @@ class MarkovDetector:
             logger.warning("Not enough data to detect regime; defaulting to 'sideways'.")
             return "sideways"
 
-        hidden_states = self.model.predict(X)
-        current_state = int(hidden_states[-1])
-        regime = self._state_to_regime.get(current_state, "sideways")
-        logger.debug("Current hidden state %d → regime '%s'", current_state, regime)
-        return regime
+        if _HAVE_HMMLEARN and hasattr(self.model, "predict"):
+            hidden_states = self.model.predict(X)
+            current_state = int(hidden_states[-1])
+            regime = self._state_to_regime.get(current_state, "sideways")
+            logger.debug("Current hidden state %d → regime '%s'", current_state, regime)
+            return regime
+        else:
+            # Fallback: use last log_return and thresholds
+            last_lr = X[-1, 0]
+            if hasattr(self, "_thresholds"):
+                q75, q50, q25 = self._thresholds
+            else:
+                q75, q50, q25 = np.percentile(X[:, 0], [75, 50, 25])
+            if last_lr >= q75:
+                regime = "bull"
+            elif last_lr >= q50:
+                regime = "sideways"
+            elif last_lr >= q25:
+                regime = "bear"
+            else:
+                regime = "crash"
+            logger.debug("Fallback detect: last_lr=%f -> regime '%s'", last_lr, regime)
+            return regime
 
     def detect_sequence(
         self,
@@ -144,8 +175,27 @@ class MarkovDetector:
         if self.model is None:
             raise RuntimeError("Call fit() before detect_sequence().")
         X = self._build_features(price_series, volume_series)
-        hidden_states = self.model.predict(X)
-        return [self._state_to_regime.get(int(s), "sideways") for s in hidden_states]
+        if len(X) == 0:
+            return []
+        if _HAVE_HMMLEARN and hasattr(self.model, "predict"):
+            hidden_states = self.model.predict(X)
+            return [self._state_to_regime.get(int(s), "sideways") for s in hidden_states]
+        else:
+            if hasattr(self, "_thresholds"):
+                q75, q50, q25 = self._thresholds
+            else:
+                q75, q50, q25 = np.percentile(X[:, 0], [75, 50, 25])
+            res = []
+            for v in X[:, 0]:
+                if v >= q75:
+                    res.append("bull")
+                elif v >= q50:
+                    res.append("sideways")
+                elif v >= q25:
+                    res.append("bear")
+                else:
+                    res.append("crash")
+            return res
 
 
 if __name__ == "__main__":

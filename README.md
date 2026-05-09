@@ -1,156 +1,89 @@
-# EvoTrade
+# EvoTrade — AI Self-Evolving Paper Trading Platform
 
-EvoTrade is a self-evolving AI trading bot that uses a Genetic Algorithm (DEAP) to breed optimal trading strategies, validates them through Monte Carlo stress testing, and filters decisions through a Multi-Agent Council of three specialist Claude AI agents — all streaming live to a React + Recharts dashboard. It is designed for educational and research purposes only and does not constitute financial advice.
-
----
-
-## Quick Start (Demo — no API keys required)
-
-```bash
-# 1. Install Python dependencies
-cd backend
-pip install -r requirements.txt
-
-# 2. Run the full pipeline demo (uses free Yahoo Finance data)
-cd ..
-python scripts/run_demo.py
-```
-
-**Optional flags:**
-```bash
-python scripts/run_demo.py --symbol ETH/USDT --profile high --generations 20
-```
-
-**Quick GA sanity check:**
-```bash
-python scripts/test_evolution.py
-```
+EvoTrade uses a Genetic Algorithm to evolve custom trading strategies in real time. Watch 5 generations of 10 candidate strategies compete, survive, and mutate — then deploy the winning AlphaGene to paper trade live BTC/USDT data from Binance. **No real money. No broker connection. Paper trading only.**
 
 ---
 
-## Full Setup (Live backend + frontend)
+## Quickstart
 
-### Backend
+### Windows
+```
+start.bat
+```
+Opens two terminal windows — one for backend, one for frontend.
 
+### Mac / Linux
 ```bash
-cd backend
-
-# Copy and fill in your API keys
-cp .env.example .env
-# Edit .env with your ANTHROPIC_API_KEY, BINANCE_API_KEY, etc.
-
-pip install -r requirements.txt
-
-# Start the FastAPI server
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+chmod +x start.sh && ./start.sh
 ```
 
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-# Open http://localhost:3000
-```
+Then open **http://localhost:5173**
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Layer 1 — Data Ingestion                           │
-│  yFinance (historical) · Binance WS (live) · NewsAPI│
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│  Layer 2 — Processing                               │
-│  TA-Lib indicators · Normalizer · HMM Regime (4-state)│
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│  Layer 3 — Genetic Algorithm (DEAP)                 │
-│  Gene (6 params) · Population · Fitness (Sharpe)    │
-│  Selection · Crossover · Mutation · Convergence      │
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│  Layer 4 — Stress Testing                           │
-│  Monte Carlo GBM (1000 paths) · Scenario simulator  │
-│  Backtrader backtesting engine                      │
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│  Layer 5 — Multi-Agent Council (Claude API)         │
-│  The Critic (overfitting) · The Guardian (VaR/risk) │
-│  The Forecaster (macro/sentiment) → fitness delta   │
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│  Layer 6 — Execution Engine                         │
-│  Alpha Gene store · Main trading thread             │
-│  Background regime monitor · Re-evolution trigger   │
-│  Safety controls (daily loss cap, emergency stop)   │
-└───────────────────────┬─────────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────────┐
-│  Layer 7 — API + Frontend                           │
-│  FastAPI REST + WebSocket · React + Recharts        │
-│  Real-time evolution graph · Live trade log         │
-│  Regime badge · Gene display · Safety controls      │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        BROWSER (React 18 + Vite)                │
+│  ┌──────────┐   ┌──────────────┐   ┌────────────────────────┐  │
+│  │   Chat   │ → │  Evolution   │ → │  Live Trading Dashboard │  │
+│  │Onboarding│   │Visualization │   │  (BTC/USDT paper trade) │  │
+│  └──────────┘   └──────────────┘   └────────────────────────┘  │
+│       Zustand stores │ REST (axios) │ WebSocket (native)         │
+└──────────────────────┼─────────────┼────────────────────────────┘
+                       │             │
+┌──────────────────────┼─────────────┼────────────────────────────┐
+│             BACKEND (FastAPI + Uvicorn)                          │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  /api/chat/*  /api/evolution/*  /api/trading/*  /ws      │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│  ┌──────────┐ ┌──────────┐ ┌───────────┐ ┌──────────────────┐  │
+│  │ GA Engine│ │HMM Regime│ │Monte Carlo│ │  Paper Trader    │  │
+│  │  (DEAP)  │ │(hmmlearn)│ │  (NumPy)  │ │ (no real money!) │  │
+│  └──────────┘ └──────────┘ └───────────┘ └──────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Binance Public WebSocket ← BTC/USDT 1m klines (no key) │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│  SQLite (evotrade.db)                                            │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## REST API
+## Tech Stack
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/onboard` | Set symbol, risk profile, capital |
-| `POST` | `/start` | Begin evolution + live trading |
-| `POST` | `/pause` | Pause trading |
-| `POST` | `/resume` | Resume trading |
-| `POST` | `/emergency_stop` | Halt everything immediately |
-| `GET`  | `/status` | Current gene, regime, fitness history |
-| `WS`   | `/ws` | Real-time event stream |
-
----
-
-## Environment Variables
-
-Copy `backend/.env.example` to `backend/.env`:
-
-| Variable | Description |
-|----------|-------------|
-| `ANTHROPIC_API_KEY` | Claude API key (required for agent council) |
-| `BINANCE_API_KEY` | Binance API key (required for live trading) |
-| `BINANCE_API_SECRET` | Binance API secret |
-| `NEWS_API_KEY` | NewsAPI key (for sentiment agent) |
-| `DEFAULT_SYMBOL` | e.g. `BTC/USDT` |
-| `DEFAULT_RISK_PROFILE` | `low` / `medium` / `high` |
+| Layer | Technology |
+|---|---|
+| Frontend | React 18, Vite, TypeScript, TailwindCSS |
+| State | Zustand |
+| Charts | Recharts |
+| Animation | Framer Motion |
+| Backend | FastAPI, Uvicorn, Python 3.10+ |
+| GA Engine | DEAP |
+| Regime Detection | hmmlearn (4-state GaussianHMM) |
+| Stress Testing | NumPy (GBM + jump diffusion) |
+| Indicators | `ta` library (RSI, MA, Bollinger) |
+| Market Data | Binance public WebSocket |
+| Historical Data | yfinance |
+| Database | SQLite (Supabase-compatible schema) |
+| Real-time | Native WebSocket (FastAPI + asyncio) |
 
 ---
 
-## Gene Parameters
+## Demo Flow
 
-Each evolved trading strategy is encoded as 6 parameters:
+1. **Chat** (`/`) — Answer 7 questions about your risk profile. The bot extracts name, capital, risk tolerance, experience, asset preference, daily loss limit, and strategy preference.
 
-| Parameter | Range | Description |
-|-----------|-------|-------------|
-| `rsi_period` | 5–30 bars | RSI lookback window |
-| `ma_short` | 5–50 bars | Short moving average |
-| `ma_long` | 20–200 bars | Long moving average |
-| `stop_loss_pct` | 1–10 % | Stop-loss threshold |
-| `take_profit_pct` | 1–20 % | Take-profit threshold |
-| `position_size_pct` | 1–50 % | Capital per trade |
+2. **Evolve** (`/evolution`) — Watch 5 generations × 10 chromosomes evolve. Each chromosome is backtested on 90 days of real BTC price data, stress-tested with 50 Monte Carlo paths, and scored by a 3-agent mock AI council. The top 3 AlphaGenes are shown side-by-side. Select one and confirm.
 
-**BUY signal:** RSI < 30 AND price > MA_short  
-**SELL signal:** RSI > 70 AND price < MA_long (or stop/take-profit hit)
+3. **Trade** (`/dashboard`) — Live BTC/USDT price streams from Binance. The deployed AlphaGene generates BUY/SELL signals from RSI + moving average crossovers, with automatic stop-loss and take-profit. All trades are paper only. Hit Emergency Stop to close all positions instantly.
 
 ---
 
-## Disclaimer
+## Notes
 
-This software is provided for **educational and research purposes only**. It is not financial advice. Cryptocurrency trading involves substantial risk of loss. Never use this system with real funds without thorough independent testing and risk assessment. The authors accept no liability for trading losses.
+- No API keys required for the MVP demo (Binance public stream, no authentication)
+- HMM model is trained on startup using 90 days of yfinance data (~30 seconds first run)
+- Evolution takes ~2–4 minutes for 5 generations on a typical laptop
+- State resets on browser refresh (Zustand in-memory only — by design for MVP)

@@ -1,0 +1,9 @@
+{
+  "rsi_period": 28,
+  "ma_short": 9,
+  "ma_long": 88,
+  "stop_loss_pct": 0.057,
+  "take_profit_pct": 0.083,
+  "position_size_pct": 0.178,
+  "fitness": 2.1806
+}
