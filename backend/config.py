@@ -30,11 +30,11 @@ def _optional(key: str, default: str) -> str:
 class Config:
     """Central configuration object. Instantiated once at import time."""
 
-    # --- API Keys ---
-    ANTHROPIC_API_KEY: str = _require("ANTHROPIC_API_KEY")
-    BINANCE_API_KEY: str = _require("BINANCE_API_KEY")
-    BINANCE_API_SECRET: str = _require("BINANCE_API_SECRET")
-    NEWS_API_KEY: str = _require("NEWS_API_KEY")
+    # --- API Keys (all optional — paper trading works without any of these) ---
+    ANTHROPIC_API_KEY: str = _optional("ANTHROPIC_API_KEY", "")
+    BINANCE_API_KEY: str = _optional("BINANCE_API_KEY", "")
+    BINANCE_API_SECRET: str = _optional("BINANCE_API_SECRET", "")
+    NEWS_API_KEY: str = _optional("NEWS_API_KEY", "")
 
     # --- Trading Defaults ---
     DEFAULT_SYMBOL: str = _optional("DEFAULT_SYMBOL", "BTC/USDT")

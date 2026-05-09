@@ -78,6 +78,13 @@ class AppState:
         self.symbol: str = "BTC/USDT"
         self.initial_capital: float = 10_000.0
 
+        # Pre-market / live adaptation
+        self.pre_market_done: bool = False
+        self.top_genes: list = []
+        self.ready_to_join: bool = False
+        self.active_gene: Optional[dict] = None
+        self.binance_feed_task = None
+
         # References injected by main.py
         self.trader = None
         self.monitor = None

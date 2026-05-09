@@ -1,0 +1,24 @@
+# Environment / secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Outputs / state
+backend/outputs/
+outputs/
+
+# Frontend build
+frontend/dist/
+frontend/node_modules/
+
+# Misc
+.DS_Store
+*.log

@@ -10,7 +10,10 @@ import logging
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Optional
 
-from binance.client import Client as BinanceClient
+try:
+    from binance.client import Client as BinanceClient  # type: ignore
+except ImportError:
+    BinanceClient = None  # type: ignore
 
 from execution.alpha_gene_store import AlphaGeneStore
 from execution.safety_controls import SafetyControls
@@ -80,8 +83,8 @@ class MainTradingThread:
         self.event_callback = event_callback
         self.initial_capital = initial_capital
 
-        self._client: Optional[BinanceClient] = None
-        if not dry_run:
+        self._client = None
+        if not dry_run and BinanceClient is not None:
             self._client = BinanceClient(api_key, api_secret)
 
         self._prices: list[float] = []
