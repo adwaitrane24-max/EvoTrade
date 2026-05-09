@@ -18,13 +18,18 @@ import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
-# Ensure backend package is importable when run directly
-sys.path.insert(0, str(Path(__file__).parent))
+# Ensure both import styles work (backend.* and top-level modules under backend/)
+_BACKEND_DIR = Path(__file__).parent
+_REPO_ROOT = _BACKEND_DIR.parent
+for _path in (str(_REPO_ROOT), str(_BACKEND_DIR)):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 from api.routes import app_state, router
 from api.websocket_handler import ws_manager
 from config import config
 from data.yfinance_loader import YFinanceLoader
+from data.binance_ws import BinanceWebSocket
 from execution.alpha_gene_store import AlphaGeneStore
 from execution.background_thread import BackgroundMonitor
 from execution.main_thread import MainTradingThread
@@ -122,6 +127,17 @@ async def _launch_evolution_and_trading() -> None:
             event_callback=_broadcast,
         )
         app_state.trader = trader
+        app_state.portfolio_value = app_state.initial_capital
+
+        # Prime with recent closes so live signal generation starts immediately.
+        trader._prices = [float(x) for x in df["Close"].tail(400).tolist()]
+
+        # ── Start paper-trading market feed ───────────────────────────────────
+        feed = BinanceWebSocket(symbol_raw)
+        feed.add_callback(trader.on_tick)
+        app_state.binance_feed = feed
+        app_state.binance_feed_task = asyncio.create_task(feed.start(), name="binance_feed")
+        await _broadcast({"type": "paper_trading_started", "symbol": app_state.symbol})
 
         # ── Background regime monitor ─────────────────────────────────────────
         async def get_recent_data():
@@ -133,9 +149,12 @@ async def _launch_evolution_and_trading() -> None:
             if app_state.trader:
                 app_state.trader.gene = gene  # hot-swap
 
+        async def get_full_data():
+            return loader.fetch(period_days=730)
+
         re_trigger = ReEvolutionTrigger(
             gene_store=gene_store,
-            price_df_getter=lambda: asyncio.coroutine(lambda: loader.fetch(period_days=730))(),
+            price_df_getter=get_full_data,
             risk_profile=app_state.risk_profile,
             event_callback=_broadcast,
             on_new_gene=on_new_gene,
@@ -248,6 +267,7 @@ async def start_live_adaptation(top_genes: list[Gene]) -> None:
             await _broadcast({"type": "live_gene_selected", "gene": app_state.active_gene})
 
         feed.add_callback(_on_tick)
+        app_state.binance_feed = feed
         task = asyncio.create_task(feed.start())
         app_state.binance_feed_task = task
         logger.info("Live adaptation started with %d genes", len(genes))
@@ -291,6 +311,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("EvoTrade backend starting up…")
     yield
     logger.info("EvoTrade backend shutting down…")
+    if getattr(app_state, "binance_feed", None):
+        await app_state.binance_feed.stop()
+    if app_state.binance_feed_task and not app_state.binance_feed_task.done():
+        app_state.binance_feed_task.cancel()
+        try:
+            await app_state.binance_feed_task
+        except asyncio.CancelledError:
+            pass
     if app_state.monitor:
         await app_state.monitor.stop()
 
@@ -317,19 +345,6 @@ app.include_router(router)
 async def websocket_endpoint(ws: WebSocket) -> None:
     """Stream real-time events to connected frontend clients."""
     await ws_manager.handle_client(ws)
-
-
-# Override /start to actually launch the pipeline
-@app.post("/start", include_in_schema=False)
-async def _start_override() -> dict:
-    from api.routes import app_state as _state
-    if _state.running:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=409, detail="Already running.")
-    _state.running = True
-    task = asyncio.create_task(_launch_evolution_and_trading())
-    _state.evolution_task = task
-    return {"status": "ok", "message": "Evolution and trading started."}
 
 
 if __name__ == "__main__":

@@ -38,7 +38,11 @@ class AlphaGeneStore:
         """
         self._gene = gene
         self.path.write_text(json.dumps(gene.to_dict(), indent=2), encoding="utf-8")
-        logger.info("Alpha Gene saved to %s (fitness=%.4f)", self.path, gene.fitness)
+        fitness = getattr(gene, "fitness", None)
+        if fitness is None:
+            logger.info("Alpha Gene saved to %s", self.path)
+        else:
+            logger.info("Alpha Gene saved to %s (fitness=%.4f)", self.path, float(fitness))
 
     def load(self) -> Optional[Gene]:
         """
@@ -55,7 +59,11 @@ class AlphaGeneStore:
             data = json.loads(self.path.read_text(encoding="utf-8"))
             gene = Gene.from_dict(data)
             self._gene = gene
-            logger.info("Alpha Gene loaded from %s (fitness=%.4f)", self.path, gene.fitness)
+            fitness = getattr(gene, "fitness", None)
+            if fitness is None:
+                logger.info("Alpha Gene loaded from %s", self.path)
+            else:
+                logger.info("Alpha Gene loaded from %s (fitness=%.4f)", self.path, float(fitness))
             return gene
         except (json.JSONDecodeError, KeyError) as exc:
             logger.error("Failed to load Alpha Gene: %s", exc)

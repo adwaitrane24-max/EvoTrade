@@ -84,6 +84,7 @@ class AppState:
         self.ready_to_join: bool = False
         self.active_gene: Optional[dict] = None
         self.binance_feed_task = None
+        self.binance_feed = None
 
         # References injected by main.py
         self.trader = None
@@ -181,8 +182,20 @@ async def start() -> dict:
 
     app_state.running = True
     app_state.paused = False
+    app_state.fitness_history = []
+    app_state.current_gene = None
 
-    # Actual launch logic is in main.py to avoid circular imports
+    try:
+        # Import here to avoid circular module imports at startup
+        from main import _launch_evolution_and_trading
+
+        task = asyncio.create_task(_launch_evolution_and_trading())
+        app_state.evolution_task = task
+    except Exception as exc:
+        app_state.running = False
+        logger.exception("Failed to start evolution pipeline: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to start evolution pipeline")
+
     await ws_manager.broadcast({"type": "started"})
     logger.info("Start requested via /start.")
     return {"status": "ok", "message": "Evolution and trading started."}
@@ -223,6 +236,12 @@ async def emergency_stop() -> dict:
 
     if app_state.monitor:
         await app_state.monitor.stop()
+
+    if getattr(app_state, "binance_feed", None):
+        await app_state.binance_feed.stop()
+
+    if app_state.binance_feed_task and not app_state.binance_feed_task.done():
+        app_state.binance_feed_task.cancel()
 
     if app_state.evolution_task and not app_state.evolution_task.done():
         app_state.evolution_task.cancel()
