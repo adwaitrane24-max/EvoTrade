@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from backend.execution.secure_exec import OrderIntent
+from execution.secure_exec import OrderIntent
 
 logger = logging.getLogger(__name__)
 

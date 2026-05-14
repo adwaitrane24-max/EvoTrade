@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
-from backend.genetic.gene import Gene
-from backend.genetic.fitness import backtest_gene
-from backend.stress_test.scenarios import get_all_scenarios
+from genetic.gene import Gene
+from genetic.fitness import backtest_gene
+from stress_test.scenarios import get_all_scenarios
 
 
 def run_monte_carlo(gene: Gene, df: pd.DataFrame, n_runs: int = 5) -> dict:
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-    from backend.data.yfinance_loader import fetch_historical_data
+    from data.yfinance_loader import fetch_historical_data
     
     df = fetch_historical_data("BTC-USD", "1y")
     gene = Gene()

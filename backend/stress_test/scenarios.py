@@ -55,7 +55,7 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-    from backend.data.yfinance_loader import fetch_historical_data
+    from data.yfinance_loader import fetch_historical_data
     df = fetch_historical_data("BTC-USD", "1y")
     scenarios = get_all_scenarios(df)
     print("Scenarios created:")

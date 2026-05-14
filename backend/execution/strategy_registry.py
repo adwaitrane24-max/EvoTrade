@@ -27,7 +27,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
-from backend.genetic.gene import Gene
+from genetic.gene import Gene
 
 logger = logging.getLogger(__name__)
 

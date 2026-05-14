@@ -1,5 +1,5 @@
 import random
-from backend.genetic.gene import Gene
+from genetic.gene import Gene
 
 _PARAMS = [
     "rsi_period",

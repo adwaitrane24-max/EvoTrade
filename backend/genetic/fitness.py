@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from backend.genetic.gene import Gene
+from genetic.gene import Gene
 
 
 def calculate_rsi(prices: pd.Series, period: int) -> pd.Series:
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     import sys
     import os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-    from backend.data.yfinance_loader import fetch_historical_data
+    from data.yfinance_loader import fetch_historical_data
     
     df = fetch_historical_data("BTC-USD", "1y")
     gene = Gene(rsi_period=14, ma_short=10, ma_long=50,

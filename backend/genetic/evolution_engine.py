@@ -8,19 +8,14 @@ from datetime import datetime
 from typing import Any, Awaitable, Callable, Optional
 
 try:
-    from backend.data.yfinance_loader import fetch_historical_data
-    from backend.genetic.convergence import ConvergenceChecker
-    from backend.genetic.crossover import create_offspring
-    from backend.genetic.fitness import backtest_gene
-    from backend.genetic.gene import Gene
-    from backend.stress_test.monte_carlo import run_monte_carlo
-except ModuleNotFoundError:
     from data.yfinance_loader import fetch_historical_data
     from genetic.convergence import ConvergenceChecker
     from genetic.crossover import create_offspring
     from genetic.fitness import backtest_gene
     from genetic.gene import Gene
     from stress_test.monte_carlo import run_monte_carlo
+except ModuleNotFoundError:
+    pass
 
 logger = logging.getLogger(__name__)
 
